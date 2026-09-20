@@ -47,8 +47,13 @@ export const generatePlan = async (req: Request, res: Response): Promise<void> =
 
     // Persist only the database fields; algorithm-only Date fields are not schema columns.
     if (scheduleResult.newBlocks.length > 0) {
+      if (!req.user?.id) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+      const userId = req.user.id;
       const rows = scheduleResult.newBlocks.map(block => ({
-        user_id: req.user.id,
+        user_id: userId,
         assignment_id: block.assignmentId,
         date: block.startTime.toISOString().slice(0, 10),
         start_time: block.startTime.toISOString().slice(11, 19),
