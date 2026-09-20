@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/hooks/useAuth';
 import AuthGuard from '@/components/auth/AuthGuard';
 import AppLayout from '@/components/layout/AppLayout';
+import { TaskProvider } from '@/hooks/useTasks';
 
 // Public pages
 const Landing = lazy(() => import('@/pages/Landing'));
@@ -16,6 +17,7 @@ const Timeline = lazy(() => import('@/pages/Timeline'));
 const Assignments = lazy(() => import('@/pages/Assignments'));
 const AssignmentDetail = lazy(() => import('@/pages/AssignmentDetail'));
 const Analytics = lazy(() => import('@/pages/Analytics'));
+const Settings = lazy(() => import('@/pages/settings')); // <-- Added
 
 const LoadingFallback = () => (
   <div className="flex h-screen w-screen items-center justify-center">
@@ -29,29 +31,33 @@ const LoadingFallback = () => (
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Suspense fallback={<LoadingFallback />}>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/demo" element={<Demo />} />
+      <TaskProvider>
+        <BrowserRouter>
+          <Suspense fallback={<LoadingFallback />}>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/demo" element={<Demo />} />
 
-            {/* Authenticated routes */}
-            <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/timeline" element={<Timeline />} />
-              <Route path="/assignments" element={<Assignments />} />
-              <Route path="/assignments/:id" element={<AssignmentDetail />} />
-              <Route path="/analytics" element={<Analytics />} />
-            </Route>
+              {/* Authenticated routes */}
+              <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/timeline" element={<Timeline />} />
+                <Route path="/assignments" element={<Assignments />} />
+                <Route path="/assignments/:id" element={<AssignmentDetail />} />
+                <Route path="/analytics" element={<Analytics />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/settings/availability" element={<Settings />} />
+              </Route>
 
-            {/* Catch-all */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
+              {/* Catch-all */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </TaskProvider>
     </AuthProvider>
   );
 }

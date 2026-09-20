@@ -1,10 +1,22 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase'; // Assumes supabase client is setup here
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  User as FirebaseUser,
+} from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+
+export interface AuthUser {
+  id: string;
+  email: string | null;
+  displayName?: string | null;
+}
 
 type AuthContextType = {
-  user: User | null;
-  session: Session | null;
+  user: AuthUser | null;
+  session: { access_token: string; user: AuthUser } | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -14,52 +26,90 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [session, setSession] = useState<{ access_token: string; user: AuthUser } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setSession(session);
-        setUser(session?.user ?? null);
-      } catch (error) {
-        console.error('Error getting session:', error);
-      } finally {
-        setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        const token = await firebaseUser.getIdToken();
+        const authUser: AuthUser = {
+          id: firebaseUser.uid,
+          email: firebaseUser.email || null,
+          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+        };
+        setUser(authUser);
+        setSession({ access_token: token, user: authUser });
+      } else {
+        setUser(null);
+        setSession(null);
       }
-    };
-
-    initializeAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+  const formatFirebaseError = (error: any): string => {
+    switch (error?.code) {
+      case 'auth/email-already-in-use':
+        return 'An account with this email already exists. Please log in instead.';
+      case 'auth/weak-password':
+        return 'Password is too weak. Please use at least 6 characters.';
+      case 'auth/invalid-email':
+        return 'Please enter a valid email address.';
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential':
+        return 'Invalid email or password. Please try again.';
+      case 'auth/network-request-failed':
+        return 'Network connection error. Check your internet connection.';
+      default:
+        return error?.message || 'Authentication failed. Please try again.';
+    }
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    return { error };
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      return { error: null };
+    } catch (err: any) {
+      return { error: new Error(formatFirebaseError(err)) };
+    }
+  };
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      return { error: null };
+    } catch (err: any) {
+      return { error: new Error(formatFirebaseError(err)) };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await firebaseSignOut(auth);
+    } catch {
+      // ignore
+    }
+    localStorage.removeItem('deadlineos_guest_user');
+    setUser(null);
+    setSession(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        loading,
+        signIn,
+        signUp,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -3,11 +3,7 @@ import { calculatePriority, AssignmentMetrics } from '../algorithms/priorityEngi
 import { generateSchedule, SchedulerInput, ScheduleBlock } from '../algorithms/scheduler';
 // Mock Supabase client for demonstration purposes. 
 // In a real app, import from a configured utils/supabase.ts
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.SUPABASE_URL || 'https://mock.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'mock-key';
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from '../lib/supabase.js';
 
 export const generatePlan = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -17,7 +13,7 @@ export const generatePlan = async (req: Request, res: Response): Promise<void> =
       existingBlocks: ScheduleBlock[]
     };
 
-    if (!assignments || !availability) {
+    if (!Array.isArray(assignments) || !Array.isArray(availability)) {
       res.status(400).json({ error: 'Missing assignments or availability' });
       return;
     }
@@ -49,11 +45,19 @@ export const generatePlan = async (req: Request, res: Response): Promise<void> =
     // 3. Generate schedule
     const scheduleResult = generateSchedule(input);
 
-    // 4. Save to Supabase (Mock)
+    // Persist only the database fields; algorithm-only Date fields are not schema columns.
     if (scheduleResult.newBlocks.length > 0) {
+      const rows = scheduleResult.newBlocks.map(block => ({
+        user_id: req.user.id,
+        assignment_id: block.assignmentId,
+        date: block.startTime.toISOString().slice(0, 10),
+        start_time: block.startTime.toISOString().slice(11, 19),
+        end_time: block.endTime.toISOString().slice(11, 19),
+        planned_minutes: Math.round(block.durationHours * 60),
+      }));
       const { error } = await supabase
         .from('schedule_blocks')
-        .insert(scheduleResult.newBlocks);
+        .insert(rows);
 
       if (error) {
         console.error('Error saving blocks to Supabase:', error);

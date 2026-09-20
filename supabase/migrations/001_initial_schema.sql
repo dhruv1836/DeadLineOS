@@ -278,8 +278,18 @@ CREATE POLICY "Users can create own planning runs"
 -- ============================================================
 -- STORAGE
 -- ============================================================
--- NOTE: Create 'assignment-files' bucket in Supabase Dashboard (private).
--- Storage RLS policies (set in Dashboard > Storage > Policies):
---   SELECT: bucket_id = 'assignment-files' AND auth.uid()::text = (storage.foldername(name))[1]
---   INSERT: bucket_id = 'assignment-files' AND auth.uid()::text = (storage.foldername(name))[1]
---   DELETE: bucket_id = 'assignment-files' AND auth.uid()::text = (storage.foldername(name))[1]
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('assignment-files', 'assignment-files', FALSE)
+ON CONFLICT (id) DO UPDATE SET public = FALSE;
+
+CREATE POLICY "Users can read own assignment files"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'assignment-files' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY "Users can upload own assignment files"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'assignment-files' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY "Users can delete own assignment files"
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'assignment-files' AND auth.uid()::text = (storage.foldername(name))[1]);

@@ -17,6 +17,8 @@ export interface SchedulerInput {
   assignments: (AssignmentMetrics & { priorityScore: number })[];
   availability: TimeSlot[];
   existingBlocks: ScheduleBlock[];
+  maxDailyStudyHours?: number; // Default 6 hours
+  pacingBreakMinutes?: number; // Default 15 mins
 }
 
 export interface SchedulerOutput {
@@ -26,42 +28,47 @@ export interface SchedulerOutput {
 
 /**
  * Deterministic scheduling algorithm.
- * Allocates highest priority assignments first.
- * Respects user availability and avoids existing blocks.
- * Splits work into maximum 2-hour blocks.
+ * - Allocates highest priority assignments first.
+ * - Respects user availability and avoids existing blocks.
+ * - Caps blocks to max 2 hours.
+ * - Enforces strict daily cognitive load cap (max 6 hours/day).
+ * - Enforces 15-minute pacing buffer between study blocks.
  */
 export function generateSchedule(input: SchedulerInput): SchedulerOutput {
   const { assignments, availability, existingBlocks } = input;
+  const maxDailyMs = (input.maxDailyStudyHours ?? 6) * 60 * 60 * 1000;
+  const pacingBreakMs = (input.pacingBreakMinutes ?? 15) * 60 * 1000;
+  const maxBlockDurationMs = 2 * 60 * 60 * 1000; // 2 hours max per block
   
-  // Sort assignments by priority score descending
   const sortedAssignments = [...assignments].sort((a, b) => b.priorityScore - a.priorityScore);
-  
-  // Sort availability slots by start time
   const availableSlots = [...availability].sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
   
   const newBlocks: ScheduleBlock[] = [];
   const unallocatedAssignments: string[] = [];
-  const maxBlockDurationMs = 2 * 60 * 60 * 1000; // 2 hours
 
-  // Helper to check if a proposed slot conflicts with existing blocks
+  // Track daily scheduled load to prevent cramming
+  const dailyScheduledMs = new Map<string, number>();
+  const getDayKey = (d: Date) => d.toISOString().slice(0, 10);
+
+  existingBlocks.forEach(b => {
+    const key = getDayKey(new Date(b.startTime));
+    const dur = new Date(b.endTime).getTime() - new Date(b.startTime).getTime();
+    dailyScheduledMs.set(key, (dailyScheduledMs.get(key) || 0) + dur);
+  });
+
   const isConflict = (start: Date, end: Date): boolean => {
     return existingBlocks.some(block => {
       const blockStart = new Date(block.startTime).getTime();
       const blockEnd = new Date(block.endTime).getTime();
-      const s = start.getTime();
-      const e = end.getTime();
-      // Overlap condition: (StartA < EndB) and (EndA > StartB)
-      return s < blockEnd && e > blockStart;
+      return start.getTime() < blockEnd && end.getTime() > blockStart;
     });
   };
 
-  // State to track remaining hours per assignment
   const remainingHours = new Map<string, number>();
   sortedAssignments.forEach(a => remainingHours.set(a.id, a.estimatedHours));
 
   for (const assignment of sortedAssignments) {
     let hoursLeft = remainingHours.get(assignment.id) || 0;
-    
     if (hoursLeft <= 0) continue;
 
     for (let slotIndex = 0; slotIndex < availableSlots.length && hoursLeft > 0; slotIndex++) {
@@ -70,59 +77,56 @@ export function generateSchedule(input: SchedulerInput): SchedulerOutput {
       const endTime = slot.endTime.getTime();
 
       while (currentTime < endTime && hoursLeft > 0) {
-        // We want to schedule up to max 2 hours, or remaining hours, or remaining slot time
+        const dayKey = getDayKey(new Date(currentTime));
+        const currentDayLoad = dailyScheduledMs.get(dayKey) || 0;
+        const availableDailyMs = Math.max(0, maxDailyMs - currentDayLoad);
+
+        // If today's cognitive load cap is reached, jump to next slot
+        if (availableDailyMs <= 0) break;
+
         const slotRemainingMs = endTime - currentTime;
         const workRemainingMs = hoursLeft * 60 * 60 * 1000;
         
-        let proposedDurationMs = Math.min(maxBlockDurationMs, slotRemainingMs, workRemainingMs);
+        let proposedDurationMs = Math.min(maxBlockDurationMs, slotRemainingMs, workRemainingMs, availableDailyMs);
         let proposedEnd = currentTime + proposedDurationMs;
         
-        // Ensure no conflict
         if (isConflict(new Date(currentTime), new Date(proposedEnd))) {
-          // If conflict, advance time past the conflict (simplistic conflict resolution)
           const conflictingBlock = existingBlocks.find(b => {
              const bStart = new Date(b.startTime).getTime();
              const bEnd = new Date(b.endTime).getTime();
              return currentTime < bEnd && proposedEnd > bStart;
           });
           
-          if (conflictingBlock) {
-             currentTime = new Date(conflictingBlock.endTime).getTime();
-          } else {
-             // Fallback to push forward a bit if logic error
-             currentTime += 15 * 60 * 1000; // 15 mins
-          }
+          currentTime = conflictingBlock ? new Date(conflictingBlock.endTime).getTime() + pacingBreakMs : currentTime + 15 * 60 * 1000;
           continue;
         }
 
-        if (proposedDurationMs > 0) {
+        if (proposedDurationMs >= 15 * 60 * 1000) { // minimum 15 min session
           const newBlock: ScheduleBlock = {
             id: `block-${Math.random().toString(36).substring(7)}`,
             assignmentId: assignment.id,
             startTime: new Date(currentTime),
             endTime: new Date(proposedEnd),
-            durationHours: proposedDurationMs / (60 * 60 * 1000)
+            durationHours: Math.round((proposedDurationMs / (60 * 60 * 1000)) * 100) / 100
           };
           
           newBlocks.push(newBlock);
-          // Also add to existing blocks to prevent self-conflict in next iterations
-          existingBlocks.push(newBlock); 
+          existingBlocks.push(newBlock);
+          dailyScheduledMs.set(dayKey, currentDayLoad + proposedDurationMs);
           
           hoursLeft -= newBlock.durationHours;
-          currentTime = proposedEnd;
+          // Pacing break between study sessions
+          currentTime = proposedEnd + pacingBreakMs;
         } else {
-          break; // Avoid infinite loops if something goes wrong
+          break;
         }
       }
     }
 
-    if (hoursLeft > 0) {
+    if (hoursLeft > 0.1) {
       unallocatedAssignments.push(assignment.id);
     }
   }
 
-  return {
-    newBlocks,
-    unallocatedAssignments
-  };
+  return { newBlocks, unallocatedAssignments };
 }

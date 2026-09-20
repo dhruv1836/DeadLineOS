@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { ArrowLeft } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -31,8 +32,19 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-      <Card className="w-full max-w-md shadow-lg border-0">
+      <Card className="w-full max-w-md shadow-lg border-0 bg-white">
         <CardHeader className="space-y-2 pb-6">
+          {/* 📍 EXACT LOCATION FOR BACK BUTTON */}
+          <div className="flex justify-start mb-1">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Home</span>
+            </Link>
+          </div>
+
           <CardTitle className="text-3xl font-bold text-center tracking-tight">Login</CardTitle>
           <CardDescription className="text-center text-base">
             Welcome back to DeadlineOS AI

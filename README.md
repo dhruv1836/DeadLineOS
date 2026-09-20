@@ -1,154 +1,88 @@
-<<<<<<< HEAD
-# DEADLINE-OS
-=======
 # DeadlineOS AI
 
 DeadlineOS AI is a full-stack student planning application for tracking assignments, estimating workload, prioritising deadlines, and generating study schedules.
 
-## Features
+## Stack
 
-- Email and password authentication
-- Protected dashboard, timeline, assignments, analytics, and assignment-detail routes
-- Assignment planning interface with priorities, deadlines, progress, and status
-- Priority calculation and schedule-generation utilities
-- AI service structure for workload estimation, assignment analysis, and subtask generation
-- CSV and PDF export utilities
-- File-storage-ready assignment schema
+- Client: React, TypeScript, Vite, Tailwind CSS, React Router
+- Server: Node.js, Express, TypeScript
+- Data and auth: Supabase Auth, PostgreSQL, and Storage
+- Analysis: `pdf-parse` with optional OpenAI structured extraction
 
-> **Project status:** the authentication client is connected to Supabase, while several screens (including the assignments list and dashboard metrics) still use mock data. The server API currently exposes placeholder assignment and planner routes.
+## Setup
 
-## Tech stack
+Requirements: Node.js 18+ and npm.
 
-- **Client:** React, TypeScript, Vite, Tailwind CSS, React Router, TanStack Query
-- **Server:** Node.js, Express, TypeScript
-- **Current backend service:** Supabase Auth, PostgreSQL, and Storage
-- **Planning:** Custom priority and scheduling algorithms
-
-## Project structure
-
-```text
-.
-|- client/                  # React/Vite frontend
-|  `- src/
-|     |- components/        # UI, layout, dashboard, timeline, and auth components
-|     |- hooks/             # Authentication and demo hooks
-|     |- pages/             # Application routes
-|     `- lib/               # Supabase browser client
-|- server/                  # Express API and planning logic
-|  `- src/
-|     |- algorithms/        # Priority engine and scheduler
-|     |- controllers/       # Planner controller
-|     |- middleware/        # Authentication middleware
-|     `- services/          # AI-related services
-|- supabase/
-|  `- migrations/           # PostgreSQL schema and RLS policies
-`- .env.example             # Required environment variables
+```bash
+npm install
+npm run install:all
 ```
 
-## Prerequisites
+Create a root `.env` file:
 
-- Node.js 18 or newer
-- npm
-- A Supabase project (for the current implementation)
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+OPENAI_API_KEY=your-openai-key
+PORT=5000
+VITE_API_URL=http://localhost:5000
+CLIENT_ORIGINS=http://localhost:5173
+```
 
-## Installation
+Keep `SUPABASE_SERVICE_ROLE_KEY` and `OPENAI_API_KEY` on the server only. The PDF analyzer works without `OPENAI_API_KEY` by using deterministic text extraction, but AI-quality analysis requires the key.
 
-1. Clone the repository and enter the project directory.
+Apply `supabase/migrations/001_initial_schema.sql` to the Supabase project. It creates the private `assignment-files` bucket and per-user Storage policies. Uploaded files must use the path `<auth-user-id>/<generated-file-name>`; the server enforces this path.
 
-   ```bash
-   git clone <repository-url>
-   cd WEBSITE
-   ```
+## Supabase firewall and connection
 
-2. Install dependencies for the root project, client, and server.
+1. Create a Supabase project and copy its URL from **Project Settings > API**.
+2. Enable **Authentication > Providers > Email**.
+3. In **SQL Editor**, run the migration file. Do not expose the service-role key in the client.
+4. In the root `.env`, set `VITE_SUPABASE_URL`, `SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY`. Set `SUPABASE_SERVICE_ROLE_KEY` only for the server.
+5. Set `VITE_API_URL=http://localhost:5000` and `CLIENT_ORIGINS=http://localhost:5173` locally. In production, replace them with the deployed client and API origins, comma-separated if needed.
+6. In Supabase **Settings > Database > Network Restrictions**, allow only the fixed public egress IP of the deployed server. Leave local development unrestricted or add your current public IP temporarily.
+7. In **Authentication > URL Configuration**, set the production Site URL and add the client URL to Redirect URLs.
+8. Start the API and check `http://localhost:5000/health`, then start the client and sign up. Assignment requests use the Supabase access token automatically.
 
-   ```bash
-   npm install
-   npm run install:all
-   ```
+The API CORS allowlist is the application firewall. Supabase RLS is the data firewall: users can read and write only their own rows and files. Never put `SUPABASE_SERVICE_ROLE_KEY` in `client/.env` or any `VITE_*` variable.
 
-3. Create `.env` in the project root using `.env.example` as the template.
-
-   ```env
-   VITE_SUPABASE_URL=https://your-project.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-anon-key
-   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-   OPENAI_API_KEY=your-openai-key
-   PORT=5000
-   VITE_API_URL=http://localhost:5000
-   ```
-
-   Never commit `.env`, `SUPABASE_SERVICE_ROLE_KEY`, or `OPENAI_API_KEY`. The service-role key belongs only on the server.
-
-## Database setup (Supabase)
-
-1. Create a Supabase project.
-2. In **Authentication > Providers**, enable Email authentication.
-3. In **SQL Editor**, run [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql).
-4. In **Storage**, create a private bucket named `assignment-files`.
-5. Add the three Supabase variables to `.env`.
-6. Start the project and create a user at `/signup`. The database trigger automatically creates the corresponding `profiles` record.
-
-The migration creates these tables:
-
-- `profiles`
-- `assignments`
-- `subtasks`
-- `schedule_blocks`
-- `study_sessions`
-- `user_availability`
-- `ai_recommendations`
-- `planning_runs`
-
-Row Level Security (RLS) policies limit users to their own records. Subtask access is enforced through the parent assignment.
-
-## Running locally
-
-Run both the client and server:
+## Run
 
 ```bash
 npm run dev
 ```
 
-- Client: Vite prints its local URL, usually `http://localhost:5173`
-- Server health check: `http://localhost:5000/health`
+The client runs on the Vite URL, usually `http://localhost:5173`, and the server runs on `http://localhost:5000`.
 
-Run either service individually:
-
-```bash
-npm run dev:client
-npm run dev:server
-```
-
-Create a production build:
+Build both packages with:
 
 ```bash
 npm run build
 ```
 
-## API routes
+## API
 
-| Method | Route | Current behavior |
+Authenticated routes require `Authorization: Bearer <supabase-access-token>`.
+
+| Method | Route | Behavior |
 | --- | --- | --- |
-| `GET` | `/health` | Returns server status |
-| `GET` | `/api/assignments` | Placeholder assignments response |
-| `GET` | `/api/planner` | Placeholder planner response |
+| `GET` | `/health` | Server health status |
+| `GET` | `/api/assignments` | List the authenticated user's assignments and subtasks |
+| `POST` | `/api/assignments` | Create an assignment and optional subtasks |
+| `PATCH` | `/api/assignments/:id` | Update an owned assignment |
+| `DELETE` | `/api/assignments/:id` | Delete an owned assignment |
+| `POST` | `/api/assignments/analyze-pdf` | Analyze one PDF in multipart field `file`, max 10 MB |
+| `POST` | `/api/planner` | Generate and persist a schedule |
+| `POST` | `/api/planner/replan` | Recalculate and persist a schedule |
 
-The planner controller contains schedule generation logic, but its routes still need to be wired into `server/src/index.ts` and secured with the authentication middleware before production use.
+The PDF endpoint extracts readable text, detects assignment metadata and requirements, and uses OpenAI structured output when configured. Scanned image-only PDFs need OCR before they can be analyzed.
 
-## Firebase migration note
+## Project layout
 
-Firebase has not yet been integrated into the codebase. If you migrate from Supabase, replace the Supabase client/auth middleware with Firebase Authentication, Firestore, Firebase Storage, and Firebase Admin; then update the environment variables and Firestore rules. Do not mix Supabase and Firebase credentials in production.
-
-## Next development steps
-
-1. Replace mock assignment and dashboard data with database queries.
-2. Implement assignment CRUD, subtasks, schedules, and study-session persistence.
-3. Wire authenticated planner endpoints into Express.
-4. Add input validation and tests for API routes.
-5. Configure production CORS, environment secrets, and deployment.
-
-## License
-
-This project is private and does not currently include a license.
->>>>>>> 50dfecc (Initial commit)
+```text
+client/       React application
+server/       Express API, auth middleware, AI services, and planning algorithms
+supabase/     Database schema and RLS migration
+```

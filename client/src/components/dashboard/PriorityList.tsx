@@ -1,45 +1,41 @@
-import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertCircle } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-
-interface PriorityItem {
-  id: string;
-  title: string;
-  course: string;
-  priorityScore: number; // 0-100
-  progress: number;
-}
-
-const mockPriorities: PriorityItem[] = [
-  { id: '1', title: 'Final Project Prototype', course: 'Computer Science', priorityScore: 95, progress: 40 },
-  { id: '2', title: 'Term Paper Draft', course: 'Literature', priorityScore: 88, progress: 15 },
-  { id: '3', title: 'Weekly Quiz Prep', course: 'Chemistry', priorityScore: 75, progress: 0 },
-];
+import { useTasks } from '@/hooks/useTasks';
 
 export function PriorityList() {
+  const { tasks } = useTasks();
+
+  const priorityOrder = { High: 3, Medium: 2, Low: 1 };
+  const sortedPriorities = tasks
+    .filter(t => t.status !== 'Completed')
+    .sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority] || a.progress - b.progress)
+    .slice(0, 3);
+
   return (
     <Card className="h-full">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 text-orange-500" />
+          <AlertCircle className="w-5 h-5 text-amber-500" />
           Top Priorities
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-5">
-          {mockPriorities.length === 0 ? (
-            <p className="text-muted-foreground text-sm text-center">No high priority tasks right now.</p>
+          {sortedPriorities.length === 0 ? (
+            <p className="text-muted-foreground text-sm text-center py-6">All clear! No active priority tasks.</p>
           ) : (
-            mockPriorities.map((item) => (
+            sortedPriorities.map((item) => (
               <div key={item.id} className="space-y-2">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h4 className="font-semibold text-sm leading-tight">{item.title}</h4>
+                    <h4 className="font-semibold text-sm text-slate-900 leading-tight">{item.title}</h4>
                     <p className="text-xs text-muted-foreground">{item.course}</p>
                   </div>
-                  <div className="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded">
-                    Score: {item.priorityScore}
+                  <div className={`text-xs font-bold px-2 py-1 rounded ${
+                    item.priority === 'High' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {item.priority}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

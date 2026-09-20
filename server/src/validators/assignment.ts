@@ -7,6 +7,9 @@ export const createAssignmentSchema = z.object({
   estimated_hours: z.number().positive('Estimated hours must be positive'),
   difficulty: z.enum(['easy', 'medium', 'hard']),
   description: z.string().optional(),
+  source_file_path: z.string().max(500).optional(),
+  assignment_type: z.enum(['homework', 'lab', 'project', 'quiz', 'presentation', 'report', 'other']).default('homework'),
+  subtasks: z.array(z.object({ title: z.string().min(1), estimated_minutes: z.number().int().positive() })).optional(),
   status: z.enum(['not_started', 'in_progress', 'completed']).default('not_started'),
 });
 
