@@ -14,7 +14,8 @@
     "concurrently": "^8.2.2"
   },
   "dependencies": {
-    "firebase": "^12.19.0"
+    "firebase": "^12.19.0",
+    "typescript": "^7.0.2"
   },
   "allowScripts": {
     "@firebase/util@1.15.3": true,
